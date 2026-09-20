@@ -26,7 +26,7 @@ logger = get_logger(__name__)
 # 敏感信息脱敏
 # ------------------------------------------------------------------
 
-PHONE_RE = re.compile(r"1[3-9]\d{9}")
+PHONE_RE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 ID_CARD_RE = re.compile(r"\d{17}[\dXx]")
 ORDER_RE = re.compile(r"(订单号|订单)[:：]?\s*([A-Za-z0-9]{6,})")
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
