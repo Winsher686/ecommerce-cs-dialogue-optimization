@@ -1,22 +1,14 @@
 """
 LoRA 适配器热加载管理器。
 
-支持:
-    - 注册多个 adapter
-    - 运行时加载 / 卸载
-    - 查询当前可用 adapter
-
-用法:
-    from src.inference.lora_manager import LoRAManager
-    mgr = LoRAManager()
-    mgr.register("dpo", "outputs/dpo")
-    mgr.load("dpo")
+注册本地 adapter 目录；vLLM 路径下由引擎的 LoRARequest 真正加载。
 """
 
 import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
+from src.training.merge_lora import is_lora_adapter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,6 +19,7 @@ class LoRAAdapter:
     name: str
     path: str
     loaded: bool = False
+    available: bool = False
     meta: dict = field(default_factory=dict)
 
 
@@ -36,15 +29,25 @@ class LoRAManager:
         self._active: Optional[str] = None
 
     def register(self, name: str, path: str, **meta) -> None:
-        if not os.path.exists(path):
-            logger.warning(f"adapter path not found: {path}")
-        self._adapters[name] = LoRAAdapter(name=name, path=path, meta=meta)
-        logger.info(f"registered adapter: {name} -> {path}")
+        available = os.path.isdir(path) and (
+            is_lora_adapter(path) or os.path.isfile(os.path.join(path, "config.json"))
+        )
+        if not available:
+            logger.warning(f"adapter path not ready: {path}")
+        self._adapters[name] = LoRAAdapter(
+            name=name,
+            path=path,
+            available=available,
+            meta=meta,
+        )
+        logger.info(f"registered adapter: {name} -> {path} available={available}")
 
     def load(self, name: str) -> LoRAAdapter:
         if name not in self._adapters:
             raise KeyError(f"adapter not registered: {name}")
         adapter = self._adapters[name]
+        if not adapter.available:
+            raise FileNotFoundError(f"adapter not found on disk: {adapter.path}")
         adapter.loaded = True
         self._active = name
         logger.info(f"loaded adapter: {name}")
@@ -64,10 +67,15 @@ class LoRAManager:
 
     def list_adapters(self) -> list[dict]:
         return [
-            {"name": a.name, "path": a.path, "loaded": a.loaded, "meta": a.meta}
+            {
+                "name": a.name,
+                "path": a.path,
+                "loaded": a.loaded,
+                "available": a.available,
+                "meta": a.meta,
+            }
             for a in self._adapters.values()
         ]
 
     def switch(self, name: str) -> LoRAAdapter:
-        """切换到指定 adapter，等价于 load。"""
         return self.load(name)

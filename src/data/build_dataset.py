@@ -148,8 +148,29 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--negatives", type=str, default="data/processed/negative_candidates.jsonl")
     p.add_argument("--sft-output", type=str, default="data/processed/sft_dataset.jsonl")
     p.add_argument("--dpo-output", type=str, default="data/processed/dpo_dataset.jsonl")
+    p.add_argument("--test-output", type=str, default="data/processed/test.jsonl")
+    p.add_argument("--test-ratio", type=float, default=0.05)
     p.add_argument("--seed", type=int, default=42)
     return p.parse_args()
+
+
+def split_test(dpo: list[dict], sft: list[dict], ratio: float) -> list[dict]:
+    """从 DPO 对中切出评测集；不足时回退到 SFT 样本。"""
+    pool = list(dpo) if dpo else [
+        {
+            "prompt": x["prompt"],
+            "chosen": x["response"],
+            "rejected": "",
+            "source": x.get("source", "unknown"),
+        }
+        for x in sft
+    ]
+    if not pool or ratio <= 0:
+        return []
+    n = max(1, int(len(pool) * ratio))
+    n = min(n, len(pool))
+    random.shuffle(pool)
+    return pool[:n]
 
 
 if __name__ == "__main__":
@@ -169,3 +190,7 @@ if __name__ == "__main__":
 
     dpo = build_dpo_dataset(data, negatives)
     save_jsonl(dpo, args.dpo_output)
+
+    test = split_test(dpo, sft, args.test_ratio)
+    if test:
+        save_jsonl(test, args.test_output)

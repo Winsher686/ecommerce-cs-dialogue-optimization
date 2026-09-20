@@ -26,6 +26,16 @@ logger = get_logger(__name__)
 # 文本生成指标
 # ------------------------------------------------------------------
 
+def _tokenize(text: str) -> list[str]:
+    """中文按字、英文按空白切分，避免客服语料 BLEU/ROUGE 恒为 0。"""
+    text = (text or "").strip()
+    if not text:
+        return []
+    if any("\u4e00" <= ch <= "\u9fff" for ch in text):
+        return [ch for ch in text if not ch.isspace()]
+    return text.split()
+
+
 def _ngrams(tokens: list[str], n: int) -> Counter:
     return Counter(tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1))
 
@@ -39,8 +49,8 @@ def compute_bleu(preds: list[str], refs: list[str], n: int = 4) -> float:
 
     scores = []
     for pred, ref in zip(preds, refs):
-        p_tokens = pred.split()
-        r_tokens = ref.split()
+        p_tokens = _tokenize(pred)
+        r_tokens = _tokenize(ref)
         if not p_tokens or not r_tokens:
             scores.append(0.0)
             continue
@@ -81,8 +91,8 @@ def compute_rouge_l(preds: list[str], refs: list[str]) -> float:
         return 0.0
     scores = []
     for pred, ref in zip(preds, refs):
-        p = pred.split()
-        r = ref.split()
+        p = _tokenize(pred)
+        r = _tokenize(ref)
         if not p or not r:
             scores.append(0.0)
             continue

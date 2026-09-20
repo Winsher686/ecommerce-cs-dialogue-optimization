@@ -34,15 +34,43 @@ def load_jsonl(path: str) -> list[dict]:
 
 
 def save_jsonl(data: list[dict], path: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for item in data:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
     logger.info(f"saved {len(data)} items to {path}")
 
 
+def to_sft_sample(item: dict) -> list[dict]:
+    """
+    统一成 SFT 训练格式: {prompt, response, source}。
+    兼容 messages 多轮对话。
+    """
+    if "prompt" in item and "response" in item:
+        sample = {
+            "prompt": item["prompt"],
+            "response": item["response"],
+            "source": item.get("source", "unknown"),
+        }
+        return [sample]
+
+    msgs = item.get("messages") or []
+    samples = []
+    for i, m in enumerate(msgs):
+        if m.get("role") != "assistant":
+            continue
+        prompt_msgs = msgs[:i]
+        if not prompt_msgs or prompt_msgs[-1].get("role") != "user":
+            continue
+        samples.append({
+            "prompt": prompt_msgs,
+            "response": m.get("content", ""),
+            "source": item.get("source", "general"),
+        })
+    return samples
+
+
 def generate_demo_general(n: int = 300, seed: int = 42) -> list[dict]:
-    """生成模拟通用指令数据。"""
     rng = random.Random(seed)
     templates = [
         ("请介绍一下{topic}", "{topic}是一门很有意思的领域，可以从基础概念入手学习。"),
@@ -58,10 +86,8 @@ def generate_demo_general(n: int = 300, seed: int = 42) -> list[dict]:
         q = tpl.format(topic=topic)
         a = ans.format(topic=topic)
         data.append({
-            "messages": [
-                {"role": "user", "content": q},
-                {"role": "assistant", "content": a},
-            ],
+            "prompt": [{"role": "user", "content": q}],
+            "response": a,
             "source": "general",
         })
     return data
@@ -72,23 +98,31 @@ def mix(sft: list[dict], general: list[dict], ratio: float) -> list[dict]:
     ratio 表示通用数据占 sft 数据的比例。
     例如 ratio=0.1 表示通用数据量 = len(sft) * 0.1。
     """
-    if not general:
+    sft_norm = []
+    for item in sft:
+        sft_norm.extend(to_sft_sample(item))
+
+    general_norm = []
+    for item in general:
+        general_norm.extend(to_sft_sample(item))
+
+    if not general_norm:
         logger.warning("general data is empty, return sft only")
-        return sft
+        return sft_norm
 
-    target_n = int(len(sft) * ratio)
+    target_n = int(len(sft_norm) * ratio)
     if target_n <= 0:
-        return sft
+        return sft_norm
 
-    if len(general) >= target_n:
-        sampled = random.sample(general, target_n)
+    if len(general_norm) >= target_n:
+        sampled = random.sample(general_norm, target_n)
     else:
-        sampled = general * (target_n // len(general) + 1)
+        sampled = general_norm * (target_n // len(general_norm) + 1)
         sampled = sampled[:target_n]
 
-    mixed = sft + sampled
+    mixed = sft_norm + sampled
     random.shuffle(mixed)
-    logger.info(f"sft={len(sft)}, general={len(sampled)}, mixed={len(mixed)}")
+    logger.info(f"sft={len(sft_norm)}, general={len(sampled)}, mixed={len(mixed)}")
     return mixed
 
 

@@ -15,5 +15,7 @@ beta: 0.1
 loss_type: dpo
 bf16: false
 fp16: false
+merge_and_save: true
+merged_output_dir: outputs/mvp/dpo_merged
 logging_steps: 5
 save_steps: 50

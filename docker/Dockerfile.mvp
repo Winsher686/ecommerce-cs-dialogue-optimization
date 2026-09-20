@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-mvp.txt .
+RUN pip install --no-cache-dir -r requirements-mvp.txt
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+ENV USE_MOCK_ENGINE=1
+ENV FINETUNED_RATIO=0
+
+EXPOSE 8000
+CMD ["python", "-m", "src.inference.api"]

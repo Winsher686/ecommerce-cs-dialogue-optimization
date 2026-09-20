@@ -35,6 +35,13 @@ def quantize_awq(
         zero_point:    是否使用 zero point
         calib_samples: 校准样本数
     """
+    adapter_cfg = os.path.join(model_path, "adapter_config.json")
+    if os.path.isfile(adapter_cfg):
+        raise ValueError(
+            f"{model_path} 是 LoRA adapter，请先 python -m src.training.merge_lora "
+            "把权重合并进基座后再量化"
+        )
+
     try:
         from awq import AutoAWQForCausalLM
         from transformers import AutoTokenizer

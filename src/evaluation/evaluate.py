@@ -14,9 +14,9 @@ import os
 
 import yaml
 
+from src.evaluation.metrics import compute_all
 from src.utils.logger import get_logger
 from src.utils.seed import set_seed
-from src.evaluation.metrics import compute_all
 
 logger = get_logger(__name__)
 
@@ -37,10 +37,22 @@ def load_jsonl(path: str) -> list[dict]:
 
 
 def save_json(data: dict, path: str) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     logger.info(f"saved report to {path}")
+
+
+def resolve_test_path(test_path: str) -> str:
+    if os.path.exists(test_path):
+        return test_path
+    fallback = "data/processed/dpo_dataset.jsonl"
+    if os.path.exists(fallback):
+        logger.warning(f"{test_path} missing, fallback to {fallback}")
+        return fallback
+    raise FileNotFoundError(
+        f"test set not found: {test_path}，请先运行 python -m src.data.build_dataset"
+    )
 
 
 def build_prompts(test_data: list[dict], tokenizer) -> list[str]:
@@ -66,12 +78,14 @@ def build_prompts(test_data: list[dict], tokenizer) -> list[str]:
 
 
 def collect_refs(test_data: list[dict]) -> tuple[list[str], list[str]]:
-    """从测试集里取参考回复（chosen / rejected 或 messages 里的 assistant）。"""
     refs, rejected = [], []
     for item in test_data:
         if "chosen" in item:
             refs.append(item["chosen"])
             rejected.append(item.get("rejected", ""))
+        elif "response" in item:
+            refs.append(item["response"])
+            rejected.append("")
         elif "messages" in item:
             asst = [m["content"] for m in item["messages"] if m["role"] == "assistant"]
             refs.append(asst[-1] if asst else "")
@@ -79,38 +93,46 @@ def collect_refs(test_data: list[dict]) -> tuple[list[str], list[str]]:
     return refs, rejected
 
 
-def generate_with_vllm(model_path: str, prompts: list[str], cfg: dict) -> list[str]:
+def generate_preds(model_path: str, prompts: list[str], cfg: dict) -> list[str]:
+    use_mock = os.environ.get("USE_MOCK_ENGINE", "0") == "1" or cfg.get("use_mock", False)
+    max_tokens = cfg.get("max_new_tokens", 512)
+    temperature = cfg.get("temperature", 0.7)
+    top_p = cfg.get("top_p", 0.9)
+    base_model = cfg.get("tokenizer_path") or cfg.get("base_model")
+
+    if use_mock:
+        from src.inference.mock_engine import MockEngine
+
+        engine = MockEngine(model_path=model_path, base_model=base_model)
+        return engine.generate(prompts, max_tokens=max_tokens, temperature=temperature, top_p=top_p)
+
     from src.inference.vllm_engine import VLLMEngine
 
     engine = VLLMEngine(model_path=model_path)
-    return engine.generate(
-        prompts,
-        max_tokens=cfg.get("max_new_tokens", 512),
-        temperature=cfg.get("temperature", 0.7),
-        top_p=cfg.get("top_p", 0.9),
-    )
+    return engine.generate(prompts, max_tokens=max_tokens, temperature=temperature, top_p=top_p)
 
 
 def evaluate(config_path: str, test_path: str, output_dir: str) -> dict:
     cfg = load_config(config_path)
     set_seed(cfg.get("seed", 42))
 
+    test_path = resolve_test_path(test_path)
     test_data = load_jsonl(test_path)
     logger.info(f"loaded {len(test_data)} test samples")
 
-    # 这里仅用 tokenizer 做 prompt 拼接，不加载完整模型
     from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(
-        cfg.get("tokenizer_path", "Qwen/Qwen3-8B"),
-        trust_remote_code=True,
-    )
+
+    tokenizer_path = cfg.get("tokenizer_path") or cfg.get("base_model") or cfg["model_name_or_path"]
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
 
     prompts = build_prompts(test_data, tokenizer)
     refs, rejected = collect_refs(test_data)
+    n = min(len(prompts), len(refs))
+    prompts, refs, rejected = prompts[:n], refs[:n], rejected[:n]
 
     model_path = cfg["model_name_or_path"]
     logger.info(f"generating with {model_path}")
-    preds = generate_with_vllm(model_path, prompts, cfg)
+    preds = generate_preds(model_path, prompts, cfg)
 
     report = compute_all(preds, refs, rejected if any(rejected) else None)
     report["num_samples"] = len(preds)

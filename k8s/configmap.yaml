@@ -4,7 +4,7 @@ metadata:
   name: cs-api-config
 data:
   MODEL_PATH: "outputs/awq"
-  FINETUNED_PATH: "outputs/dpo"
+  FINETUNED_PATH: "outputs/dpo_merged"
   FINETUNED_RATIO: "0.1"
   MAX_NEW_TOKENS: "512"
   TEMPERATURE: "0.7"

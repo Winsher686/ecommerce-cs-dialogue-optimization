@@ -1,17 +1,12 @@
 """数据层单元测试。"""
 
-import json
-import os
-import tempfile
-
 from src.data.preprocess import (
     clean_messages,
     deduplicate,
     mask_sensitive,
-    save_jsonl,
 )
-from src.data.build_dataset import build_sft_dataset, build_dpo_dataset
-from src.data.mix_general_data import mix
+from src.data.build_dataset import build_sft_dataset, build_dpo_dataset, split_test
+from src.data.mix_general_data import generate_demo_general, mix, to_sft_sample
 
 
 def test_mask_sensitive():
@@ -99,3 +94,21 @@ def test_mix_general_data():
                               {"role": "assistant", "content": "g"}]} for _ in range(50)]
     mixed = mix(sft, general, ratio=0.1)
     assert len(mixed) == 110
+    assert all("prompt" in x and "response" in x for x in mixed)
+
+
+def test_to_sft_sample_passthrough():
+    item = {"prompt": [{"role": "user", "content": "q"}], "response": "a", "source": "sft"}
+    out = to_sft_sample(item)
+    assert out == [item]
+
+
+def test_generate_demo_general_sft_format():
+    data = generate_demo_general(n=3, seed=0)
+    assert data and "prompt" in data[0] and "response" in data[0]
+
+
+def test_split_test():
+    dpo = [{"prompt": [], "chosen": "c", "rejected": "r"} for _ in range(20)]
+    test = split_test(dpo, [], ratio=0.1)
+    assert len(test) == 2

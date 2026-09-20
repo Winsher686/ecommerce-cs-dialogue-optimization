@@ -1,11 +1,8 @@
 ﻿#!/usr/bin/env bash
 set -e
-
 cd "$(dirname "$0")/.."
 
 export USE_MOCK_ENGINE="${USE_MOCK_ENGINE:-0}"
+export PORT="${PORT:-8000}"
 
-uvicorn src.inference.api:app \
-  --host 0.0.0.0 \
-  --port 8000 \
-  --workers 1
+python -m src.inference.api

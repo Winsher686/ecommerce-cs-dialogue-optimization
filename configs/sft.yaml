@@ -13,6 +13,10 @@ lr_scheduler_type: cosine
 warmup_ratio: 0.05
 optim: adamw_torch
 bf16: true
+fp16: false
+gradient_checkpointing: true
+merge_and_save: true
+merged_output_dir: outputs/sft_merged
 logging_steps: 10
 save_steps: 500
 

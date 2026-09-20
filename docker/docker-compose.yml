@@ -6,7 +6,7 @@ services:
     container_name: cs-api-base
     environment:
       - MODEL_PATH=outputs/awq
-      - FINETUNED_PATH=outputs/dpo
+      - FINETUNED_PATH=outputs/dpo_merged
       - FINETUNED_RATIO=0.0
     volumes:
       - ../outputs:/app/outputs
@@ -27,8 +27,8 @@ services:
       dockerfile: docker/Dockerfile
     container_name: cs-api-finetuned
     environment:
-      - MODEL_PATH=outputs/awq
-      - FINETUNED_PATH=outputs/dpo
+      - MODEL_PATH=outputs/dpo_merged
+      - FINETUNED_PATH=outputs/dpo_merged
       - FINETUNED_RATIO=1.0
     volumes:
       - ../outputs:/app/outputs
@@ -53,3 +53,21 @@ services:
     depends_on:
       - api-base
       - api-finetuned
+
+  api-mvp:
+    profiles: ["mvp"]
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mvp
+    container_name: cs-api-mvp
+    environment:
+      - USE_MOCK_ENGINE=1
+      - MODEL_PATH=Qwen/Qwen2.5-0.5B-Instruct
+      - FINETUNED_PATH=outputs/mvp/dpo_merged
+      - BASE_MODEL=Qwen/Qwen2.5-0.5B-Instruct
+      - FINETUNED_RATIO=0
+    volumes:
+      - ../outputs:/app/outputs
+      - ../logs:/app/logs
+    ports:
+      - "8000:8000"

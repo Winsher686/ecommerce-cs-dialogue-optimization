@@ -14,6 +14,8 @@ warmup_ratio: 0.05
 optim: adamw_torch
 bf16: false
 fp16: false
+merge_and_save: true
+merged_output_dir: outputs/mvp/sft_merged
 logging_steps: 5
 save_steps: 50
 

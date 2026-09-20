@@ -1,14 +1,11 @@
 ﻿"""
-MVP 推理引擎：直接用 transformers 加载小模型，不依赖 vLLM。
-
-用法:
-    from src.inference.mock_engine import MockEngine
-    engine = MockEngine(model_path="outputs/mvp/dpo")
-    outs = engine.generate(["你好"])
+MVP 推理引擎：transformers 加载完整模型或 LoRA adapter，不依赖 vLLM。
 """
 
+import os
 from typing import Optional
 
+from src.training.merge_lora import is_lora_adapter
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -19,6 +16,7 @@ class MockEngine:
         self,
         model_path: str,
         tokenizer_path: Optional[str] = None,
+        base_model: Optional[str] = None,
         device: Optional[str] = None,
         max_new_tokens: int = 256,
     ) -> None:
@@ -31,19 +29,34 @@ class MockEngine:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = device
+        dtype = torch.float16 if device == "cuda" else torch.float32
 
-        tk_path = tokenizer_path or model_path
+        load_adapter = is_lora_adapter(model_path)
+        tk_path = tokenizer_path or (base_model if load_adapter else None) or model_path
+        base_path = base_model or os.environ.get("BASE_MODEL") or tk_path
+
         logger.info(f"loading tokenizer: {tk_path}")
         self.tokenizer = AutoTokenizer.from_pretrained(tk_path, trust_remote_code=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        logger.info(f"loading model: {model_path} on {device}")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            trust_remote_code=True,
-            torch_dtype=torch.float32,
-        ).to(device)
+        if load_adapter:
+            from peft import PeftModel
+
+            logger.info(f"loading base+LoRA: {base_path} + {model_path} on {device}")
+            base = AutoModelForCausalLM.from_pretrained(
+                base_path,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            )
+            self.model = PeftModel.from_pretrained(base, model_path).to(device)
+        else:
+            logger.info(f"loading model: {model_path} on {device}")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            ).to(device)
         self.model.eval()
         logger.info("MockEngine ready")
 
@@ -58,15 +71,20 @@ class MockEngine:
         results = []
         for p in prompts:
             inputs = self.tokenizer(p, return_tensors="pt").to(self.device)
-            with self.torch.no_grad():
-                out = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new,
-                    do_sample=temperature > 0,
+            gen_kwargs = {
+                "max_new_tokens": max_new,
+                "pad_token_id": self.tokenizer.pad_token_id,
+            }
+            if temperature and temperature > 0:
+                gen_kwargs.update(
+                    do_sample=True,
                     temperature=max(temperature, 0.01),
                     top_p=top_p,
-                    pad_token_id=self.tokenizer.pad_token_id,
                 )
+            else:
+                gen_kwargs["do_sample"] = False
+            with self.torch.no_grad():
+                out = self.model.generate(**inputs, **gen_kwargs)
             text = self.tokenizer.decode(
                 out[0][inputs["input_ids"].shape[1]:],
                 skip_special_tokens=True,

@@ -86,6 +86,14 @@ def start_metrics_server(port: int = 9090) -> None:
     logger.info(f"metrics server started on :{port}")
 
 
+def render_metrics() -> tuple[bytes, str]:
+    if not _HAS_PROM:
+        return b"", "text/plain"
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    return generate_latest(), CONTENT_TYPE_LATEST
+
+
 if __name__ == "__main__":
     start_metrics_server(9090)
     logger.info("metrics server running, press Ctrl+C to stop")
