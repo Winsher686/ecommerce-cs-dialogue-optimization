@@ -16,3 +16,6 @@ fastapi
 uvicorn[standard]
 pydantic
 loguru
+sentence-transformers
+vllm
+autoawq

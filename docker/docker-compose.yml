@@ -1,0 +1,55 @@
+services:
+  api-base:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: cs-api-base
+    environment:
+      - MODEL_PATH=outputs/awq
+      - FINETUNED_PATH=outputs/dpo
+      - FINETUNED_RATIO=0.0
+    volumes:
+      - ../outputs:/app/outputs
+      - ../logs:/app/logs
+    ports:
+      - "8001:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  api-finetuned:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: cs-api-finetuned
+    environment:
+      - MODEL_PATH=outputs/awq
+      - FINETUNED_PATH=outputs/dpo
+      - FINETUNED_RATIO=1.0
+    volumes:
+      - ../outputs:/app/outputs
+      - ../logs:/app/logs
+    ports:
+      - "8002:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx.Dockerfile
+    container_name: cs-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - api-base
+      - api-finetuned

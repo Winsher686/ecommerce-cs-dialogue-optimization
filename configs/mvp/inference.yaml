@@ -1,0 +1,6 @@
+﻿model_name_or_path: outputs/mvp/dpo
+tokenizer_path: Qwen/Qwen2.5-0.5B-Instruct
+max_new_tokens: 256
+temperature: 0.7
+top_p: 0.9
+do_sample: true

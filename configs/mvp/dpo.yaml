@@ -1,0 +1,19 @@
+﻿base_model: Qwen/Qwen2.5-0.5B-Instruct
+model_name_or_path: outputs/mvp/sft
+dataset_path: data/processed/dpo_dataset.jsonl
+output_dir: outputs/mvp/dpo
+
+seed: 42
+max_seq_len: 1024
+max_prompt_len: 512
+
+num_train_epochs: 1
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+learning_rate: 1e-5
+beta: 0.1
+loss_type: dpo
+bf16: false
+fp16: false
+logging_steps: 5
+save_steps: 50
