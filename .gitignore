@@ -1,0 +1,47 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Data
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# Outputs / Models
+outputs/sft/*
+!outputs/sft/.gitkeep
+outputs/dpo/*
+!outputs/dpo/.gitkeep
+outputs/eval/*
+!outputs/eval/.gitkeep
+checkpoints/
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+
+# Secrets
+.env
+*.pem
+kubeconfig
+k8s/secret.yaml
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
